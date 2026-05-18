@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as HistoryRouteImport } from './routes/history'
+import { Route as HelpRouteImport } from './routes/help'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RacesNewRouteImport } from './routes/races.new'
 import { Route as RacesRaceIdRouteImport } from './routes/races.$raceId'
@@ -17,6 +18,11 @@ import { Route as RacesRaceIdRouteImport } from './routes/races.$raceId'
 const HistoryRoute = HistoryRouteImport.update({
   id: '/history',
   path: '/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HelpRoute = HelpRouteImport.update({
+  id: '/help',
+  path: '/help',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -37,12 +43,14 @@ const RacesRaceIdRoute = RacesRaceIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/help': typeof HelpRoute
   '/history': typeof HistoryRoute
   '/races/$raceId': typeof RacesRaceIdRoute
   '/races/new': typeof RacesNewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/help': typeof HelpRoute
   '/history': typeof HistoryRoute
   '/races/$raceId': typeof RacesRaceIdRoute
   '/races/new': typeof RacesNewRoute
@@ -50,20 +58,22 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/help': typeof HelpRoute
   '/history': typeof HistoryRoute
   '/races/$raceId': typeof RacesRaceIdRoute
   '/races/new': typeof RacesNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/history' | '/races/$raceId' | '/races/new'
+  fullPaths: '/' | '/help' | '/history' | '/races/$raceId' | '/races/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/history' | '/races/$raceId' | '/races/new'
-  id: '__root__' | '/' | '/history' | '/races/$raceId' | '/races/new'
+  to: '/' | '/help' | '/history' | '/races/$raceId' | '/races/new'
+  id: '__root__' | '/' | '/help' | '/history' | '/races/$raceId' | '/races/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  HelpRoute: typeof HelpRoute
   HistoryRoute: typeof HistoryRoute
   RacesRaceIdRoute: typeof RacesRaceIdRoute
   RacesNewRoute: typeof RacesNewRoute
@@ -76,6 +86,13 @@ declare module '@tanstack/react-router' {
       path: '/history'
       fullPath: '/history'
       preLoaderRoute: typeof HistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/help': {
+      id: '/help'
+      path: '/help'
+      fullPath: '/help'
+      preLoaderRoute: typeof HelpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -104,6 +121,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  HelpRoute: HelpRoute,
   HistoryRoute: HistoryRoute,
   RacesRaceIdRoute: RacesRaceIdRoute,
   RacesNewRoute: RacesNewRoute,
