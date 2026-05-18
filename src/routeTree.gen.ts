@@ -9,12 +9,18 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as HelpRouteImport } from './routes/help'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RacesNewRouteImport } from './routes/races.new'
 import { Route as RacesRaceIdRouteImport } from './routes/races.$raceId'
 
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const HistoryRoute = HistoryRouteImport.update({
   id: '/history',
   path: '/history',
@@ -45,6 +51,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/help': typeof HelpRoute
   '/history': typeof HistoryRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/races/$raceId': typeof RacesRaceIdRoute
   '/races/new': typeof RacesNewRoute
 }
@@ -52,6 +59,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/help': typeof HelpRoute
   '/history': typeof HistoryRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/races/$raceId': typeof RacesRaceIdRoute
   '/races/new': typeof RacesNewRoute
 }
@@ -60,27 +68,55 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/help': typeof HelpRoute
   '/history': typeof HistoryRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/races/$raceId': typeof RacesRaceIdRoute
   '/races/new': typeof RacesNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/help' | '/history' | '/races/$raceId' | '/races/new'
+  fullPaths:
+    | '/'
+    | '/help'
+    | '/history'
+    | '/sitemap.xml'
+    | '/races/$raceId'
+    | '/races/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/help' | '/history' | '/races/$raceId' | '/races/new'
-  id: '__root__' | '/' | '/help' | '/history' | '/races/$raceId' | '/races/new'
+  to:
+    | '/'
+    | '/help'
+    | '/history'
+    | '/sitemap.xml'
+    | '/races/$raceId'
+    | '/races/new'
+  id:
+    | '__root__'
+    | '/'
+    | '/help'
+    | '/history'
+    | '/sitemap.xml'
+    | '/races/$raceId'
+    | '/races/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HelpRoute: typeof HelpRoute
   HistoryRoute: typeof HistoryRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   RacesRaceIdRoute: typeof RacesRaceIdRoute
   RacesNewRoute: typeof RacesNewRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/history': {
       id: '/history'
       path: '/history'
@@ -123,6 +159,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HelpRoute: HelpRoute,
   HistoryRoute: HistoryRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
   RacesRaceIdRoute: RacesRaceIdRoute,
   RacesNewRoute: RacesNewRoute,
 }
