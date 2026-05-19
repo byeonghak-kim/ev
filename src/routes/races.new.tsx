@@ -115,17 +115,35 @@ function NewRace() {
             </div>
             <div className="space-y-1.5">
               <Label>주로 상태</Label>
-              <Input
+              <Select
                 value={form.track_condition}
-                onChange={(e) => setForm({ ...form, track_condition: e.target.value })}
-              />
+                onValueChange={(v) => setForm({ ...form, track_condition: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {["양호", "다습", "포화", "불량"].map((v) => (
+                    <SelectItem key={v} value={v}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label>날씨</Label>
-              <Input
+              <Select
                 value={form.weather}
-                onChange={(e) => setForm({ ...form, weather: e.target.value })}
-              />
+                onValueChange={(v) => setForm({ ...form, weather: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {["맑음", "흐림", "비", "눈", "안개"].map((v) => (
+                    <SelectItem key={v} value={v}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label>메모</Label>
