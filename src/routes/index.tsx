@@ -132,21 +132,30 @@ function Home() {
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {races.map((r) => (
-              <Link key={r.id} to="/races/$raceId" params={{ raceId: r.id }} search={{ tab: "ev" }}>
-                <Card className="transition hover:border-primary hover:shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="flex items-center justify-between text-base">
-                      <span>
-                        {r.venue} · {r.race_no}R
-                      </span>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-xs text-muted-foreground">
-                    경주일 {r.race_date}
-                  </CardContent>
-                </Card>
-              </Link>
+              <div key={r.id} className="relative">
+                <Link to="/races/$raceId" params={{ raceId: r.id }} search={{ tab: "ev" }}>
+                  <Card className="transition hover:border-primary hover:shadow-sm">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="flex items-center justify-between text-base">
+                        <span>
+                          {r.venue} · {r.race_no}R
+                        </span>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-xs text-muted-foreground">
+                      경주일 {r.race_date}
+                    </CardContent>
+                  </Card>
+                </Link>
+                <button
+                  onClick={(e) => void onDelete(e, r.id)}
+                  className="absolute right-2 top-2 rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  aria-label="경주 삭제"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
             ))}
           </div>
         )}
