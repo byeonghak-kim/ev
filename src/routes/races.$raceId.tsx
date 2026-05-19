@@ -447,6 +447,18 @@ function OddsTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
     await supabase.from("odds_entries").delete().eq("id", id);
     setEntries((prev) => prev.filter((e) => e.id !== id));
   };
+  const removeSnapshot = async (id: string) => {
+    if (!confirm("이 배당률 스냅샷과 모든 항목을 삭제하시겠습니까?")) return;
+    await supabase.from("odds_entries").delete().eq("snapshot_id", id);
+    const { error } = await supabase.from("odds_snapshots").delete().eq("id", id);
+    if (error) {
+      toast.error("삭제 실패");
+      return;
+    }
+    toast.success("스냅샷 삭제됨");
+    if (activeSnap?.id === id) setActiveSnap(null);
+    await reload();
+  };
 
   return (
     <div className="space-y-4">
@@ -493,15 +505,26 @@ function OddsTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <span className="text-muted-foreground">스냅샷:</span>
               {snapshots.map((s) => (
-                <button
+                <div
                   key={s.id}
-                  onClick={() => setActiveSnap(s)}
-                  className={`rounded-md border px-2 py-1 ${
-                    activeSnap?.id === s.id ? "border-primary bg-primary/10" : "hover:bg-accent"
+                  className={`inline-flex items-center gap-1 rounded-md border ${
+                    activeSnap?.id === s.id ? "border-primary bg-primary/10" : ""
                   }`}
                 >
-                  {new Date(s.captured_at).toLocaleString("ko-KR")}
-                </button>
+                  <button
+                    onClick={() => setActiveSnap(s)}
+                    className="px-2 py-1 hover:bg-accent rounded-l-md"
+                  >
+                    {new Date(s.captured_at).toLocaleString("ko-KR")}
+                  </button>
+                  <button
+                    onClick={() => void removeSnapshot(s.id)}
+                    className="px-1.5 py-1 text-muted-foreground hover:text-destructive"
+                    aria-label="스냅샷 삭제"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
               ))}
             </div>
           )}
