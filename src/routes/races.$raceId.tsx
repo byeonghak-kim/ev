@@ -952,7 +952,7 @@ function EvTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
   const [oddsList, setOddsList] = useState<OddsEntry[]>([]);
   const [probsList, setProbsList] = useState<ModelProb[]>([]);
   const [filterType, setFilterType] = useState<"전체" | BetType>("전체");
-  const [onlyPositive, setOnlyPositive] = useState(true);
+  const [onlyPositive, setOnlyPositive] = useState(false);
   const [minProb, setMinProb] = useState("");
   const [minOdds, setMinOdds] = useState("");
 
