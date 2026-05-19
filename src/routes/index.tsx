@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Sparkles, PlusCircle, History, ChevronRight } from "lucide-react";
+import { Sparkles, PlusCircle, History, ChevronRight, Trash2 } from "lucide-react";
 import { createSampleRace } from "@/lib/sample";
 import { toast } from "sonner";
 
@@ -58,6 +58,24 @@ function Home() {
       toast.error("샘플 경주 생성 실패");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const onDelete = async (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm("이 경주와 관련 데이터를 모두 삭제하시겠습니까?")) return;
+    await supabase.from("ev_results").delete().eq("race_id", id);
+    await supabase.from("model_probabilities").delete().eq("race_id", id);
+    await supabase.from("model_runs").delete().eq("race_id", id);
+    await supabase.from("odds_entries").delete().eq("race_id", id);
+    await supabase.from("odds_snapshots").delete().eq("race_id", id);
+    await supabase.from("horses").delete().eq("race_id", id);
+    const { error } = await supabase.from("races").delete().eq("id", id);
+    if (error) toast.error("삭제 실패");
+    else {
+      toast.success("삭제됨");
+      void refresh();
     }
   };
 
