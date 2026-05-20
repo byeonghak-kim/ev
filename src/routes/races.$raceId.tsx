@@ -763,15 +763,76 @@ function ProbsTab({ raceId }: { raceId: string }) {
   };
 
   const newRun = async () => {
-    const { data } = await supabase
+    // 1) 활성 스냅샷의 단승 배당률 수집
+    const { data: snaps } = await supabase
+      .from("odds_snapshots")
+      .select("id, captured_at")
+      .eq("race_id", raceId)
+      .order("captured_at", { ascending: false })
+      .limit(1);
+    const snapId = snaps?.[0]?.id as string | undefined;
+    const singleWinOdds = new Map<number, number>();
+    if (snapId) {
+      const { data: ent } = await supabase
+        .from("odds_entries")
+        .select("bet_type, horse_numbers, odds")
+        .eq("snapshot_id", snapId)
+        .eq("bet_type", "단승");
+      (ent ?? []).forEach((e: { horse_numbers: number[]; odds: number }) => {
+        const n = e.horse_numbers?.[0];
+        if (Number.isFinite(n) && Number(e.odds) > 0) {
+          singleWinOdds.set(Number(n), Number(e.odds));
+        }
+      });
+    }
+
+    // 2) 모델 런 생성
+    const inferred =
+      singleWinOdds.size >= 2 ? inferProbabilities({ singleWinOdds }) : [];
+    const { data: run, error: runErr } = await supabase
       .from("model_runs")
-      .insert({ race_id: raceId, model_name: "manual" })
+      .insert({
+        race_id: raceId,
+        model_name: inferred.length ? "auto_harville" : "manual",
+        memo: inferred.length
+          ? `단승 ${singleWinOdds.size}두 배당 기반 자동 추론`
+          : null,
+      })
       .select("*")
       .single();
-    if (data) {
-      setActiveRun(data as ModelRun);
-      void reload();
+    if (runErr || !run) {
+      toast.error("모델 런 생성 실패");
+      return;
     }
+
+    // 3) 자동 추론 결과 일괄 insert
+    if (inferred.length) {
+      const rows = inferred.map((p) => ({
+        model_run_id: (run as ModelRun).id,
+        race_id: raceId,
+        bet_type: p.bet_type,
+        combination_key: p.combination_key,
+        horse_numbers: p.horse_numbers,
+        probability: p.probability,
+      }));
+      // chunk insert (대형 페이로드 대비 500개 단위)
+      for (let i = 0; i < rows.length; i += 500) {
+        const chunk = rows.slice(i, i + 500);
+        const { error } = await supabase.from("model_probabilities").insert(chunk);
+        if (error) {
+          toast.error("확률 저장 실패");
+          break;
+        }
+      }
+      toast.success(`자동 추론 완료: ${rows.length}개 후보`);
+    } else {
+      toast.message("자동 추론 생략", {
+        description: "단승 배당이 부족합니다. 배당률 탭에서 단승을 입력하고 다시 시도하거나 수동 입력하세요.",
+      });
+    }
+
+    setActiveRun(run as ModelRun);
+    void reload();
   };
 
   const add = async () => {
