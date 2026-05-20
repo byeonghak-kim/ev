@@ -1,5 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { extractHorsesFromImage } from "@/lib/horses.functions";
+import { inferProbabilities } from "@/lib/inference";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -211,10 +214,42 @@ function HorsesTab({
     carried_weight: 56,
     sex_age: "",
   });
+  const [extracting, setExtracting] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const extractFn = useServerFn(extractHorsesFromImage);
 
   useEffect(() => {
     setNewHorse((p) => ({ ...p, horse_no: horses.length + 1 }));
   }, [horses.length]);
+
+  const onPickImage = async (file: File) => {
+    if (!file) return;
+    setExtracting(true);
+    try {
+      const buf = await file.arrayBuffer();
+      let bin = "";
+      const bytes = new Uint8Array(buf);
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      const b64 = btoa(bin);
+      const res = await extractFn({
+        data: { raceId, imageBase64: b64, mimeType: file.type || "image/png" },
+      });
+      if (!res.ok) {
+        toast.error(res.error ?? "추출 실패");
+      } else {
+        toast.success(
+          `출전마 ${res.inserted}건 추가${res.skipped ? `, ${res.skipped}건 스킵(중복)` : ""}`,
+        );
+        onChanged();
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("이미지 처리 실패");
+    } finally {
+      setExtracting(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
 
   const add = async () => {
     if (!newHorse.horse_name.trim()) {
@@ -246,6 +281,30 @@ function HorsesTab({
         <CardTitle className="text-base">출전마</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="rounded-md border p-3 flex flex-wrap items-center gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void onPickImage(f);
+            }}
+          />
+          <Button
+            size="sm"
+            onClick={() => fileRef.current?.click()}
+            disabled={extracting}
+          >
+            <Upload className="h-4 w-4" />{" "}
+            {extracting ? "추출 중..." : "더비온 캡처에서 자동 채우기"}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            안드로이드 더비온 앱의 출전표 캡처 한 장을 업로드하면 출전마가 자동 입력됩니다.
+            실패하거나 누락된 항목은 아래에서 수동으로 추가/수정할 수 있습니다.
+          </span>
+        </div>
         <div className="overflow-x-auto rounded-md border">
           <table className="w-full min-w-[640px] text-sm">
             <thead className="bg-muted/60 text-muted-foreground">
@@ -704,15 +763,76 @@ function ProbsTab({ raceId }: { raceId: string }) {
   };
 
   const newRun = async () => {
-    const { data } = await supabase
+    // 1) 활성 스냅샷의 단승 배당률 수집
+    const { data: snaps } = await supabase
+      .from("odds_snapshots")
+      .select("id, captured_at")
+      .eq("race_id", raceId)
+      .order("captured_at", { ascending: false })
+      .limit(1);
+    const snapId = snaps?.[0]?.id as string | undefined;
+    const singleWinOdds = new Map<number, number>();
+    if (snapId) {
+      const { data: ent } = await supabase
+        .from("odds_entries")
+        .select("bet_type, horse_numbers, odds")
+        .eq("snapshot_id", snapId)
+        .eq("bet_type", "단승");
+      (ent ?? []).forEach((e: { horse_numbers: number[]; odds: number }) => {
+        const n = e.horse_numbers?.[0];
+        if (Number.isFinite(n) && Number(e.odds) > 0) {
+          singleWinOdds.set(Number(n), Number(e.odds));
+        }
+      });
+    }
+
+    // 2) 모델 런 생성
+    const inferred =
+      singleWinOdds.size >= 2 ? inferProbabilities({ singleWinOdds }) : [];
+    const { data: run, error: runErr } = await supabase
       .from("model_runs")
-      .insert({ race_id: raceId, model_name: "manual" })
+      .insert({
+        race_id: raceId,
+        model_name: inferred.length ? "auto_harville" : "manual",
+        memo: inferred.length
+          ? `단승 ${singleWinOdds.size}두 배당 기반 자동 추론`
+          : null,
+      })
       .select("*")
       .single();
-    if (data) {
-      setActiveRun(data as ModelRun);
-      void reload();
+    if (runErr || !run) {
+      toast.error("모델 런 생성 실패");
+      return;
     }
+
+    // 3) 자동 추론 결과 일괄 insert
+    if (inferred.length) {
+      const rows = inferred.map((p) => ({
+        model_run_id: (run as ModelRun).id,
+        race_id: raceId,
+        bet_type: p.bet_type,
+        combination_key: p.combination_key,
+        horse_numbers: p.horse_numbers,
+        probability: p.probability,
+      }));
+      // chunk insert (대형 페이로드 대비 500개 단위)
+      for (let i = 0; i < rows.length; i += 500) {
+        const chunk = rows.slice(i, i + 500);
+        const { error } = await supabase.from("model_probabilities").insert(chunk);
+        if (error) {
+          toast.error("확률 저장 실패");
+          break;
+        }
+      }
+      toast.success(`자동 추론 완료: ${rows.length}개 후보`);
+    } else {
+      toast.message("자동 추론 생략", {
+        description: "단승 배당이 부족합니다. 배당률 탭에서 단승을 입력하고 다시 시도하거나 수동 입력하세요.",
+      });
+    }
+
+    setActiveRun(run as ModelRun);
+    void reload();
   };
 
   const add = async () => {
