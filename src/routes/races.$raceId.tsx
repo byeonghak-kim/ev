@@ -281,6 +281,30 @@ function HorsesTab({
         <CardTitle className="text-base">출전마</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="rounded-md border p-3 flex flex-wrap items-center gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void onPickImage(f);
+            }}
+          />
+          <Button
+            size="sm"
+            onClick={() => fileRef.current?.click()}
+            disabled={extracting}
+          >
+            <Upload className="h-4 w-4" />{" "}
+            {extracting ? "추출 중..." : "더비온 캡처에서 자동 채우기"}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            안드로이드 더비온 앱의 출전표 캡처 한 장을 업로드하면 출전마가 자동 입력됩니다.
+            실패하거나 누락된 항목은 아래에서 수동으로 추가/수정할 수 있습니다.
+          </span>
+        </div>
         <div className="overflow-x-auto rounded-md border">
           <table className="w-full min-w-[640px] text-sm">
             <thead className="bg-muted/60 text-muted-foreground">
