@@ -214,10 +214,42 @@ function HorsesTab({
     carried_weight: 56,
     sex_age: "",
   });
+  const [extracting, setExtracting] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const extractFn = useServerFn(extractHorsesFromImage);
 
   useEffect(() => {
     setNewHorse((p) => ({ ...p, horse_no: horses.length + 1 }));
   }, [horses.length]);
+
+  const onPickImage = async (file: File) => {
+    if (!file) return;
+    setExtracting(true);
+    try {
+      const buf = await file.arrayBuffer();
+      let bin = "";
+      const bytes = new Uint8Array(buf);
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      const b64 = btoa(bin);
+      const res = await extractFn({
+        data: { raceId, imageBase64: b64, mimeType: file.type || "image/png" },
+      });
+      if (!res.ok) {
+        toast.error(res.error ?? "추출 실패");
+      } else {
+        toast.success(
+          `출전마 ${res.inserted}건 추가${res.skipped ? `, ${res.skipped}건 스킵(중복)` : ""}`,
+        );
+        onChanged();
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("이미지 처리 실패");
+    } finally {
+      setExtracting(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
 
   const add = async () => {
     if (!newHorse.horse_name.trim()) {
