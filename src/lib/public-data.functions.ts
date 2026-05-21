@@ -117,8 +117,10 @@ const SyncInput = z.object({
 export const syncKraPublicData = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => SyncInput.parse(data))
   .handler(async ({ data }) => {
-    const supabase = getSupabase();
-    if (!supabase) return { ok: false as const, error: "DB 설정이 누락되었습니다." };
+    const supabaseMaybe = getSupabase();
+    if (!supabaseMaybe) return { ok: false as const, error: "DB 설정이 누락되었습니다." };
+    const supabase = supabaseMaybe;
+
 
     const serviceKey = process.env.DATA_GO_KR_SERVICE_KEY;
     // 로그 생성
@@ -244,8 +246,10 @@ function emptyAgg(): StatAgg {
 export const updateSimpleModel = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => ModelInput.parse(data))
   .handler(async ({ data }) => {
-    const supabase = getSupabase();
-    if (!supabase) return { ok: false as const, error: "DB 설정이 누락되었습니다." };
+    const supabaseMaybe = getSupabase();
+    if (!supabaseMaybe) return { ok: false as const, error: "DB 설정이 누락되었습니다." };
+    const supabase = supabaseMaybe;
+
 
     // 대상 경주의 출전마 로드
     const { data: horses, error: hErr } = await supabase
