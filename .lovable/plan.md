@@ -1,121 +1,158 @@
-# 수정 구현 계획 (3건)
+# 수정 계획
 
-크레딧 절약 원칙: 신규 마이그레이션 0회, 신규 npm 패키지 0개. 신규 파일은 꼭 필요한 1개(서버 함수)만 추가, 나머지는 기존 파일 부분 편집.
-
-영향 파일
-- `src/lib/horses.functions.ts` (신규 1개, 서버 함수 — OCR 호출)
-- `src/lib/inference.ts` (신규 1개, 순수 함수 — 자동 추론 로직, 테스트·재사용 가능)
-- `src/routes/races.$raceId.tsx` (HorsesTab에 업로드 버튼, ProbsTab의 `newRun()` 자동화)
-- `src/routes/help.tsx` (모델 확률 설명 + 후보 개수 설명 추가)
-
-DB/패키지/마이그레이션 변경 없음.
+기존 EV 계산 흐름(경주→출전마→OCR/수동 배당→모델확률→EV 내림차순→히스토리)은 절대 깨지 않음. 신규 마이그레이션 1회, 신규 파일은 최소(세션 유틸 1, 데이터 관리 라우트 1), 나머지는 기존 파일 부분 편집.
 
 ---
 
-## 수정사항 1: 출전마 자동 입력 (더비온 캡처 OCR)
+## 1. DB 마이그레이션 (단일 migration)
 
-현재 `HorsesTab`은 한 줄씩 수동 입력만 가능. 사용자는 캡처 한 장에서 8~16두를 한 번에 채우기를 원함.
+### 1-1. 기존 테이블에 컬럼 추가
+- `races`, `horses`, `odds_snapshots`, `odds_entries`, `model_runs`, `model_probabilities`, `ev_results`, `app_notes` 전부에:
+  - `app_session_id text`
+  - `is_deleted boolean not null default false`
+- `public_race_results`, `public_data_sync_logs`, `model_update_logs` 는 이미 존재 → 누락 컬럼(`app_session_id`, `is_deleted`, `source_unique_key UNIQUE`)만 보완.
 
-접근: Lovable AI Gateway의 비전 모델(`google/gemini-2.5-flash`, 무료 크레딧 범위)을 서버 함수로 호출. 파일 업로드 → base64로 변환 → 모델에 “마번/마명/기수/조교사/부담중량/성별연령 JSON 배열로만 응답” 프롬프트 → 결과 파싱 → `horses` 일괄 insert.
+### 1-2. 기존 "USING (true)" 정책 전면 교체
+모든 `public_all_*` 정책 DROP 후, 테이블별로 아래 4종 재생성:
 
-구현:
-- `src/lib/horses.functions.ts` (신규)
-  - `extractHorsesFromImage = createServerFn({ method: "POST" })`
-  - input: `{ raceId: string, imageBase64: string, mimeType: string }`
-  - handler: `LOVABLE_API_KEY`로 `https://ai.gateway.lovable.dev/v1/chat/completions` 호출, JSON 강제(`response_format: { type: "json_object" }`), 스키마 검증 후 supabaseAdmin으로 horses에 bulk insert. race_id별로 horse_no 중복 시 스킵.
-- `src/routes/races.$raceId.tsx` HorsesTab
-  - "캡처에서 출전마 자동 채우기" 버튼 + 숨겨진 파일 input. 업로드 시 FileReader로 base64 변환 → `useServerFn(extractHorsesFromImage)` 호출 → 성공 시 `onChanged()`로 새로고침.
-  - OCR 실패/일부 누락 시 기존 수동 추가 폼이 그대로 보조 입력으로 작동(요구사항: OCR 실패해도 수동 진행 가능).
-- `start.ts`의 `attachSupabaseAuth`는 인증 없이 호출되므로 `requireSupabaseAuth` 미들웨어는 사용하지 않음(앱 자체가 무인증).
-
-비용/크레딧 절약 포인트
-- 이미지 한 장당 1회 호출. 별도 OCR 패키지 없음.
-- 파일 저장(스토리지 버킷) 없이 base64 그대로 모델에 전달 → 마이그레이션 0.
-
----
-
-## 수정사항 2: "새 모델 런" 클릭 시 자동 추론
-
-현재 `ProbsTab.newRun()`은 빈 `model_runs` row만 생성 → ProbsTab/EvTab가 비어 있음. 사용자가 수동 입력해야 EV가 나옴. 요구사항: 출전마 + 배당률만 있으면 새 모델 런 클릭 한 번으로 EV 결과까지 즉시.
-
-접근: 외부 AI 호출 없이 **결정론적·순수 함수 모델**로 충분. 활성 배당률 스냅샷의 단승 odds로 시장 암시 확률 → 오버라운드 제거 → 각 베팅 종목 후보 자동 생성.
-
-구현:
-- `src/lib/inference.ts` (신규, 순수 TS 함수)
-  - `inferProbabilities(horses, singleWinOdds[]) → ModelProbInput[]`
-  - 단계
-    1. 단승 odds로 `p_i = (1/odds_i) / Σ(1/odds_j)` (오버라운드 정규화).
-    2. **단승**: N개 (각 마번).
-    3. **연승**(3위 이내): Harville 근사 `P_top3(i) ≈ p_i + Σ_{j≠i} p_i/(1−p_j) · p_j/(1−p_j) + ...` — 정확도보다 합리적 순위 부여가 목표이므로 단순화 가능.
-    4. **복승**(1·2위, 무순): 모든 쌍 C(N,2). `P({i,j}) = p_i·p_j/(1−p_i) + p_j·p_i/(1−p_j)`.
-    5. **쌍승**(1·2위, 유순): P(N,2). `P(i→j) = p_i · p_j/(1−p_i)`.
-    6. **복연승**(연승의 페어, 1~3위 중 2마리): C(N,2). Harville 1·2·3위 확률을 합산.
-    7. **삼복승**(1~3위 무순): C(N,3). 위와 동일.
-    8. **삼쌍승**(1~3위 유순): P(N,3). 상위 K(=12) 마번 조합만 산출(전체 720은 과다).
-  - 각 종목별 총합은 1에 가깝게(완전히 같지는 않음을 명시) 보정.
-- `ProbsTab.newRun()` 수정
-  - 새 model_run insert.
-  - 활성 odds 스냅샷 조회 → 단승 entries 추출. 8두 단승이 다 있으면 `inferProbabilities` 실행 → 결과를 `model_probabilities`에 bulk insert.
-  - 단승 entry가 없으면 빈 런만 만들고 toast로 "단승 배당이 없어 자동 추론 생략, 수동 입력하세요" 안내.
-  - 완료 후 자동 reload + setActiveRun → EV 탭에서 즉시 결과 확인 가능.
-
-크레딧 절약 포인트
-- 외부 API 호출 0회. 순수 TS만으로 동작.
-- 후보 폭발 방지: 삼쌍승만 상위 K로 제한(N=12일 때 720→12·11·10/... 적정 cap).
-
----
-
-## 수정사항 3: 도움말 보강 + 후보 개수 설명
-
-현재 `help.tsx`에 모델 확률 정의가 없고, 사용자는 "샘플 경주의 16개 후보 = 시스템 한계"로 오해.
-
-구현 (`src/routes/help.tsx`에 카드 2개 추가, 기존 카드는 유지):
-- **모델 확률이란?** 카드
-  - "모델 확률 = 해당 베팅이 적중할 것으로 추정한 확률(0~1). 사용자가 직접 입력하거나, '새 모델 런' 버튼으로 단승 배당률 기반 자동 추론을 사용할 수 있음."
-  - "배당률의 암시확률(1/odds)과 다름: 시장 컨센서스가 아닌 본인/모델의 예측 확률."
-- **후보 개수에 대하여** 카드
-  - N두 경주에서 종목별 이론 후보 수 표:
-    - 단승 N, 연승 N, 복승 C(N,2), 쌍승 P(N,2), 복연승 C(N,3), 삼복승 C(N,3), 삼쌍승 P(N,3)
-    - 예: N=12 → 12+12+66+132+220+220+1320 ≈ 약 1980개.
-  - "샘플 경주는 데모 목적으로 단승+복승만 16개를 생성. 실제 경주에서 '새 모델 런'을 누르면 출전 두수에 맞춰 자동으로 모든 종목 후보가 생성되며, 삼쌍승은 조합 폭발을 막기 위해 상위 K개로 제한함."
-
----
-
-## 기술 상세
-
-### 서버 함수 등록
-- `src/start.ts`의 `functionMiddleware`는 그대로 둠(인증 미사용이므로 `attachSupabaseAuth`가 필수는 아니나 기존 설정 보존).
-- `extractHorsesFromImage`는 `requireSupabaseAuth` 없이 정의.
-
-### Lovable AI Gateway 호출 (수정사항 1)
-```ts
-const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-  method: "POST",
-  headers: { Authorization: `Bearer ${process.env.LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-  body: JSON.stringify({
-    model: "google/gemini-2.5-flash",
-    messages: [{ role: "user", content: [
-      { type: "text", text: "한국 경마 출전표 캡처. 각 행의 마번/마명/기수/조교사/부담중량/성별연령을 JSON 배열로만 반환." },
-      { type: "image_url", image_url: { url: `data:${mime};base64,${b64}` } },
-    ]}],
-    response_format: { type: "json_object" },
-  }),
-});
 ```
-- 비용은 LOVABLE 무료 크레딧 범위.
+-- SELECT: 삭제되지 않은 행만
+CREATE POLICY sel_<t> ON public.<t> FOR SELECT TO anon, authenticated
+USING (is_deleted = false);
 
-### 추론 알고리즘 정확도
-- 목표는 정확 예측이 아니라 EV 비교용 일관된 확률 부여. Harville 모델로 충분.
-- 사용자가 결과 부정확하다고 느끼면 기존 수동 입력/CSV import로 덮어쓰기 가능.
+-- INSERT: app_session_id 유효성 + 핵심 컬럼 not null
+CREATE POLICY ins_<t> ON public.<t> FOR INSERT TO anon, authenticated
+WITH CHECK (
+  app_session_id IS NOT NULL
+  AND length(app_session_id) >= 20
+  AND is_deleted = false
+  /* + 테이블별 필수 컬럼 not null 체크 */
+);
 
-### 후보 폭발 가드
-- N(출전 두수) ≥ 14면 삼쌍승은 상위 K=12 자동 절단, 토스트로 안내.
-- DB는 race_id 기반 인덱스만 사용; 1런당 약 2000행 insert는 단일 insert(array)로 처리.
+-- UPDATE/DELETE: anon 금지 (정책 자체를 만들지 않음 → 거부)
+```
+
+> UPDATE/DELETE 정책을 만들지 않으므로 anon은 자동 차단. 기존 "수정/삭제" UI는 soft-delete(UPDATE is_deleted=true) 가 필요한데 anon이 UPDATE 불가 → MVP에서는 **삭제 버튼을 UI에서 숨김** 처리(코드 주석으로 표시).
+> 단, 배당률 수동 수정(`odds_entries` update)과 같은 기존 핵심 흐름이 깨지면 안 되므로, **owner 기반 UPDATE 정책**만 예외로 추가:
+> ```
+> CREATE POLICY upd_<t> ON public.<t> FOR UPDATE TO anon
+> USING (app_session_id IS NOT NULL AND is_deleted = false)
+> WITH CHECK (app_session_id IS NOT NULL);
+> ```
+> 적용 테이블: `odds_entries`, `horses`, `races`, `model_probabilities` (사용자가 직접 편집하는 것들). 나머지는 UPDATE 정책 없음.
+> DELETE 정책은 만들지 않음 (전 테이블).
+
+### 1-3. Storage RLS (`storage.objects`)
+- bucket `odds-screenshots` → `public = false` 로 변경 (signed URL만 노출).
+- 기존 정책 DROP 후:
+  - INSERT: `bucket_id = 'odds-screenshots' AND (storage.foldername(name))[1] ~ '^[a-f0-9-]{20,}$'` (세션 폴더만 허용)
+  - SELECT: 동일 조건 (signed URL 사용 시 RLS 우회되지만, 직접 listing 차단)
+  - UPDATE/DELETE: 정책 없음 → 차단
+- public bucket listing 차단됨 (private bucket).
 
 ---
 
-## 확인 방법
-1. 새 경주 생성 → 출전마 탭에서 더비온 캡처 업로드 → 자동 채워짐.
-2. 배당률 탭에서 단승 배당 입력/스냅샷 만든 후, 모델 확률 탭의 "새 모델 런" 클릭 → 즉시 수백 개 후보 생성, EV 탭에서 EV 내림차순 확인.
-3. 도움말 페이지에서 모델 확률 정의·후보 개수 설명 카드 노출.
-4. 신규 마이그레이션·패키지 없음, TypeScript 빌드 통과.
+## 2. 클라이언트 세션 유틸 (신규 1파일)
+
+`src/lib/session.ts`:
+```ts
+export function getAppSessionId(): string {
+  if (typeof window === 'undefined') return '';
+  let id = localStorage.getItem('app_session_id');
+  if (!id || id.length < 20) {
+    id = crypto.randomUUID();
+    localStorage.setItem('app_session_id', id);
+  }
+  return id;
+}
+```
+
+모든 기존 insert 호출부에 `app_session_id: getAppSessionId()` 추가:
+- `src/lib/sample.ts` (races/horses/odds_snapshots/odds_entries/model_runs/model_probabilities/ev_results)
+- `src/lib/inference.ts` 호출부 (`races.$raceId.tsx`의 ProbsTab.newRun)
+- `src/lib/horses.functions.ts` (서버 함수: input으로 sessionId 받아 admin insert)
+- `src/routes/races.new.tsx` (race insert)
+- `src/routes/races.$raceId.tsx` (horses 수동, snapshot/entries 수동, model_probabilities 수동, ev 계산 insert)
+
+---
+
+## 3. Storage 업로드 수정
+
+`races.$raceId.tsx`의 OCR 업로드 흐름(있다면) 및 향후 캡처 업로드:
+- 경로: `${app_session_id}/${crypto.randomUUID()}.${ext}`
+- 확장자 화이트리스트: jpg/jpeg/png/webp
+- 표시: `supabase.storage.from('odds-screenshots').createSignedUrl(path, 3600)`
+
+---
+
+## 4. UI 삭제 버튼 처리
+
+- 홈(`index.tsx`) 카드 🗑️ → **숨김 (주석으로 보존)**
+- 배당률 스냅샷/모델 런 🗑️ → **숨김**
+- 이유: anon DELETE 차단 + soft-delete 시 cascade 복잡 → MVP에선 단순 숨김.
+
+---
+
+## 5. 신규 라우트: 데이터 관리 (`src/routes/data.tsx`)
+
+섹션: "공공데이터 및 모델 관리"
+안내문 카드 + 통계 카드 + 버튼 3개:
+
+### 5-1. 통계 카드
+- `count(public_race_results where is_deleted=false)` → 저장 건수
+- `max(created_at) from public_data_sync_logs` → 마지막 동기화
+- `max(created_at) from model_update_logs` → 마지막 모델 갱신
+- 최신 model_version (model_update_logs 최근 1건)
+- 보안 상태 정적 표기: "RLS 적용 / Storage overwrite 금지 / Public listing 금지"
+
+### 5-2. 버튼 1: 샘플 공공데이터 20건 추가
+- 클라이언트에서 결정론적 샘플 20건 생성 (`source='sample'`, `source_unique_key = 'sample-' + idx + '-' + sessionId`).
+- `upsert({ onConflict: 'source_unique_key', ignoreDuplicates: true })` 로 중복 차단.
+- 결과를 `public_data_sync_logs` insert (status='success', inserted_count, skipped_count).
+- 외부 API 호출 0회 → timeout 없음.
+
+### 5-3. 버튼 2: 간이 모델 갱신
+- prop: 현재 선택 경주 ID (없으면 select로 선택).
+- 출전마(`horses`) 조회 → 각 말의 `public_race_results`에서 horse_name 매치 통계:
+  - horse_place_rate = (rank<=3 count)/(total count)
+  - jockey_place_rate, trainer_place_rate 동일
+- score = 0.4·hpr + 0.3·jpr + 0.3·tpr
+- 합=0이면 균등확률(1/N)
+- 정규화 후 model_runs insert → model_probabilities bulk insert (bet_type='단승')
+- model_update_logs insert.
+- 기존 row 수정 없음(새 버전만 추가).
+
+### 5-4. 버튼 3: EV 결과 다시 계산
+- 현재 선택 경주의 최신 active snapshot + 최신 model_run 조회.
+- `src/lib/ev.ts` 의 기존 계산 함수 재사용 → ev_results에 **새로 insert**(기존 row 그대로 두기).
+- EV 탭 기본 정렬 EV desc 유지.
+
+---
+
+## 6. 라우터 등록
+
+`src/router.tsx` / `__root.tsx` 네비게이션에 "데이터 관리" 링크 추가. `routeTree.gen.ts`는 자동 생성.
+
+---
+
+## 7. 영향 파일 요약
+
+**신규(2)**: `src/lib/session.ts`, `src/routes/data.tsx`
+**편집(7)**: `src/lib/sample.ts`, `src/lib/inference.ts`, `src/lib/horses.functions.ts`, `src/routes/races.new.tsx`, `src/routes/races.$raceId.tsx`, `src/routes/index.tsx`, `src/routes/__root.tsx`
+**마이그레이션(1)**: 컬럼 추가 + 정책 전면 재작성 + storage 정책 + bucket private화
+
+---
+
+## 8. 자체 점검 체크리스트
+
+1. supabase linter: USING(true) 경고 0건.
+2. 보안 스캔: anon UPDATE/DELETE 차단 확인.
+3. odds-screenshots: private + INSERT only.
+4. 샘플 경주 만들기 → EV 탭 정상.
+5. 새 경주 → 캡처 OCR → 배당률 수정 → 모델 런 → EV desc 정상.
+6. 데이터 관리 → 샘플 20건 추가(즉시 완료) → 간이 모델 갱신 → EV 재계산.
+7. TypeScript 빌드 통과.
+
+---
+
+승인 시 위 순서대로 1번 마이그레이션부터 실행합니다.
