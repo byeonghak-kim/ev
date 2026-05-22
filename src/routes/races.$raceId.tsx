@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { extractHorsesFromImage } from "@/lib/horses.functions";
 import { inferProbabilities } from "@/lib/inference";
+import { getAppSessionId } from "@/lib/session";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -232,7 +233,7 @@ function HorsesTab({
       for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
       const b64 = btoa(bin);
       const res = await extractFn({
-        data: { raceId, imageBase64: b64, mimeType: file.type || "image/png" },
+        data: { raceId, imageBase64: b64, mimeType: file.type || "image/png", appSessionId: getAppSessionId() },
       });
       if (!res.ok) {
         toast.error(res.error ?? "추출 실패");
@@ -256,7 +257,9 @@ function HorsesTab({
       toast.error("마명을 입력하세요");
       return;
     }
-    const { error } = await supabase.from("horses").insert({ race_id: raceId, ...newHorse });
+    const { error } = await supabase
+      .from("horses")
+      .insert({ race_id: raceId, ...newHorse, app_session_id: getAppSessionId() });
     if (error) toast.error("추가 실패");
     else {
       setNewHorse({
@@ -270,10 +273,7 @@ function HorsesTab({
       onChanged();
     }
   };
-  const remove = async (id: string) => {
-    await supabase.from("horses").delete().eq("id", id);
-    onChanged();
-  };
+  // MVP: 익명 DELETE 차단 정책으로 인해 출전마 개별 삭제는 비활성화.
 
   return (
     <Card>
@@ -315,13 +315,12 @@ function HorsesTab({
                 <th className="px-3 py-2 text-left">조교사</th>
                 <th className="px-3 py-2 text-left">부담중량</th>
                 <th className="px-3 py-2 text-left">성별/연령</th>
-                <th className="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody>
               {horses.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
                     출전마가 없습니다.
                   </td>
                 </tr>
@@ -334,11 +333,6 @@ function HorsesTab({
                   <td className="px-3 py-2 text-muted-foreground">{h.trainer ?? "-"}</td>
                   <td className="px-3 py-2 num">{h.carried_weight ?? "-"}</td>
                   <td className="px-3 py-2">{h.sex_age ?? "-"}</td>
-                  <td className="px-3 py-2 text-right">
-                    <Button size="icon" variant="ghost" onClick={() => remove(h.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </td>
                 </tr>
               ))}
             </tbody>
