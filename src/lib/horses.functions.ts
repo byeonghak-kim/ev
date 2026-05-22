@@ -7,6 +7,7 @@ const Input = z.object({
   raceId: z.string().uuid(),
   imageBase64: z.string().min(100),
   mimeType: z.string().min(3).max(64),
+  appSessionId: z.string().min(20).max(128),
 });
 
 type HorseRow = {
@@ -97,6 +98,7 @@ export const extractHorsesFromImage = createServerFn({ method: "POST" })
             ? Number(h.carried_weight)
             : null,
         sex_age: h.sex_age ? String(h.sex_age) : null,
+        app_session_id: data.appSessionId,
       }))
       .filter((r) => Number.isFinite(r.horse_no) && r.horse_no > 0 && r.horse_name);
 
