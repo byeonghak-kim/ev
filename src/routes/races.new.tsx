@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { getAppSessionId } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -44,7 +45,7 @@ function NewRace() {
     try {
       const { data, error } = await supabase
         .from("races")
-        .insert(form)
+        .insert({ ...form, app_session_id: getAppSessionId() })
         .select("id")
         .single();
       if (error) throw error;

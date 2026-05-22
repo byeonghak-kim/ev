@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { extractHorsesFromImage } from "@/lib/horses.functions";
 import { inferProbabilities } from "@/lib/inference";
+import { getAppSessionId } from "@/lib/session";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -232,7 +233,7 @@ function HorsesTab({
       for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
       const b64 = btoa(bin);
       const res = await extractFn({
-        data: { raceId, imageBase64: b64, mimeType: file.type || "image/png" },
+        data: { raceId, imageBase64: b64, mimeType: file.type || "image/png", appSessionId: getAppSessionId() },
       });
       if (!res.ok) {
         toast.error(res.error ?? "추출 실패");
@@ -256,7 +257,9 @@ function HorsesTab({
       toast.error("마명을 입력하세요");
       return;
     }
-    const { error } = await supabase.from("horses").insert({ race_id: raceId, ...newHorse });
+    const { error } = await supabase
+      .from("horses")
+      .insert({ race_id: raceId, ...newHorse, app_session_id: getAppSessionId() });
     if (error) toast.error("추가 실패");
     else {
       setNewHorse({
@@ -270,10 +273,7 @@ function HorsesTab({
       onChanged();
     }
   };
-  const remove = async (id: string) => {
-    await supabase.from("horses").delete().eq("id", id);
-    onChanged();
-  };
+  // MVP: 익명 DELETE 차단 정책으로 인해 출전마 개별 삭제는 비활성화.
 
   return (
     <Card>
@@ -315,13 +315,12 @@ function HorsesTab({
                 <th className="px-3 py-2 text-left">조교사</th>
                 <th className="px-3 py-2 text-left">부담중량</th>
                 <th className="px-3 py-2 text-left">성별/연령</th>
-                <th className="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody>
               {horses.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
                     출전마가 없습니다.
                   </td>
                 </tr>
@@ -334,11 +333,6 @@ function HorsesTab({
                   <td className="px-3 py-2 text-muted-foreground">{h.trainer ?? "-"}</td>
                   <td className="px-3 py-2 num">{h.carried_weight ?? "-"}</td>
                   <td className="px-3 py-2">{h.sex_age ?? "-"}</td>
-                  <td className="px-3 py-2 text-right">
-                    <Button size="icon" variant="ghost" onClick={() => remove(h.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </td>
                 </tr>
               ))}
             </tbody>
@@ -430,10 +424,15 @@ function OddsTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
     })();
   }, [activeSnap]);
 
-  const createSnapshot = async (screenshot_url?: string | null) => {
+  const createSnapshot = async (screenshot_path?: string | null) => {
     const { data, error } = await supabase
       .from("odds_snapshots")
-      .insert({ race_id: raceId, screenshot_url: screenshot_url ?? null, source: "manual" })
+      .insert({
+        race_id: raceId,
+        screenshot_url: screenshot_path ?? null,
+        source: "manual",
+        app_session_id: getAppSessionId(),
+      })
       .select("*")
       .single();
     if (error) {
@@ -448,11 +447,22 @@ function OddsTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
   const onUpload = async (file: File) => {
     setUploading(true);
     try {
-      const path = `${raceId}/${Date.now()}_${file.name}`;
-      const { error } = await supabase.storage.from("odds-screenshots").upload(path, file);
+      const sid = getAppSessionId();
+      const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+      if (!["jpg", "jpeg", "png", "webp"].includes(ext)) {
+        toast.error("jpg, jpeg, png, webp 형식만 업로드할 수 있습니다");
+        return;
+      }
+      const path = `${sid}/${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage
+        .from("odds-screenshots")
+        .upload(path, file, { upsert: false, contentType: file.type });
       if (error) throw error;
-      const { data: pub } = supabase.storage.from("odds-screenshots").getPublicUrl(path);
-      await createSnapshot(pub.publicUrl);
+      // 비공개 버킷이므로 signed URL 사용 (path를 DB에 보관, 화면 표시는 매번 새 signed URL 생성 가능)
+      const { data: signed } = await supabase.storage
+        .from("odds-screenshots")
+        .createSignedUrl(path, 3600);
+      await createSnapshot(signed?.signedUrl ?? path);
       toast.success("이미지 업로드 완료 (자동 추출 준비 중 — 수동 입력 가능)");
     } catch (e) {
       console.error(e);
@@ -483,6 +493,7 @@ function OddsTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
       horse_numbers: nums,
       odds: oddsNum,
       is_manual_edited: true,
+      app_session_id: getAppSessionId(),
     });
     if (error) toast.error("추가 실패");
     else {
@@ -502,22 +513,7 @@ function OddsTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
       .eq("id", id);
     setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, odds, is_manual_edited: true } : e)));
   };
-  const removeEntry = async (id: string) => {
-    await supabase.from("odds_entries").delete().eq("id", id);
-    setEntries((prev) => prev.filter((e) => e.id !== id));
-  };
-  const removeSnapshot = async (id: string) => {
-    if (!confirm("이 배당률 스냅샷과 모든 항목을 삭제하시겠습니까?")) return;
-    await supabase.from("odds_entries").delete().eq("snapshot_id", id);
-    const { error } = await supabase.from("odds_snapshots").delete().eq("id", id);
-    if (error) {
-      toast.error("삭제 실패");
-      return;
-    }
-    toast.success("스냅샷 삭제됨");
-    if (activeSnap?.id === id) setActiveSnap(null);
-    await reload();
-  };
+  // MVP: 익명 DELETE 차단으로 인해 개별 배당 항목/스냅샷 삭제는 비활성화.
 
   return (
     <div className="space-y-4">
@@ -572,16 +568,9 @@ function OddsTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
                 >
                   <button
                     onClick={() => setActiveSnap(s)}
-                    className="px-2 py-1 hover:bg-accent rounded-l-md"
+                    className="px-2 py-1 hover:bg-accent rounded-md"
                   >
                     {new Date(s.captured_at).toLocaleString("ko-KR")}
-                  </button>
-                  <button
-                    onClick={() => void removeSnapshot(s.id)}
-                    className="px-1.5 py-1 text-muted-foreground hover:text-destructive"
-                    aria-label="스냅샷 삭제"
-                  >
-                    <Trash2 className="h-3 w-3" />
                   </button>
                 </div>
               ))}
@@ -605,13 +594,12 @@ function OddsTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
                   <th className="px-3 py-2 text-right">배당률</th>
                   <th className="px-3 py-2 text-right">OCR 신뢰도</th>
                   <th className="px-3 py-2 text-center">수동 수정</th>
-                  <th className="px-3 py-2"></th>
                 </tr>
               </thead>
               <tbody>
                 {entries.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
+                    <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
                       배당률 항목이 없습니다. 아래에서 추가하세요.
                     </td>
                   </tr>
@@ -644,11 +632,6 @@ function OddsTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
                       ) : (
                         <span className="text-xs text-muted-foreground">-</span>
                       )}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <Button size="icon" variant="ghost" onClick={() => removeEntry(e.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -748,9 +731,10 @@ function ProbsTab({ raceId }: { raceId: string }) {
 
   const ensureRun = async (): Promise<ModelRun | null> => {
     if (activeRun) return activeRun;
+    const sid = getAppSessionId();
     const { data, error } = await supabase
       .from("model_runs")
-      .insert({ race_id: raceId, model_name: "manual" })
+      .insert({ race_id: raceId, model_name: "manual", app_session_id: sid })
       .select("*")
       .single();
     if (error) {
@@ -763,7 +747,7 @@ function ProbsTab({ raceId }: { raceId: string }) {
   };
 
   const newRun = async () => {
-    // 1) 활성 스냅샷의 단승 배당률 수집
+    const sid = getAppSessionId();
     const { data: snaps } = await supabase
       .from("odds_snapshots")
       .select("id, captured_at")
@@ -786,7 +770,6 @@ function ProbsTab({ raceId }: { raceId: string }) {
       });
     }
 
-    // 2) 모델 런 생성
     const inferred =
       singleWinOdds.size >= 2 ? inferProbabilities({ singleWinOdds }) : [];
     const { data: run, error: runErr } = await supabase
@@ -797,6 +780,7 @@ function ProbsTab({ raceId }: { raceId: string }) {
         memo: inferred.length
           ? `단승 ${singleWinOdds.size}두 배당 기반 자동 추론`
           : null,
+        app_session_id: sid,
       })
       .select("*")
       .single();
@@ -805,7 +789,6 @@ function ProbsTab({ raceId }: { raceId: string }) {
       return;
     }
 
-    // 3) 자동 추론 결과 일괄 insert
     if (inferred.length) {
       const rows = inferred.map((p) => ({
         model_run_id: (run as ModelRun).id,
@@ -814,8 +797,8 @@ function ProbsTab({ raceId }: { raceId: string }) {
         combination_key: p.combination_key,
         horse_numbers: p.horse_numbers,
         probability: p.probability,
+        app_session_id: sid,
       }));
-      // chunk insert (대형 페이로드 대비 500개 단위)
       for (let i = 0; i < rows.length; i += 500) {
         const chunk = rows.slice(i, i + 500);
         const { error } = await supabase.from("model_probabilities").insert(chunk);
@@ -851,6 +834,7 @@ function ProbsTab({ raceId }: { raceId: string }) {
       combination_key: combinationKey(newRow.bet_type, nums),
       horse_numbers: nums,
       probability: p,
+      app_session_id: getAppSessionId(),
     });
     if (error) toast.error("추가 실패");
     else {
@@ -866,13 +850,12 @@ function ProbsTab({ raceId }: { raceId: string }) {
   const importCsv = async () => {
     const run = await ensureRun();
     if (!run) return;
+    const sid = getAppSessionId();
     const lines = csv.trim().split(/\r?\n/);
     if (!lines.length) return;
     const start = /bet_type/i.test(lines[0]) ? 1 : 0;
     const rows = [];
     for (let i = start; i < lines.length; i++) {
-      // bet_type,combination,horse_numbers,probability
-      // horse_numbers may contain commas, so support quoted "1,3"
       const m = lines[i].match(/^([^,]+),([^,]+),(?:"([^"]+)"|([^,]+)),([\d.]+)$/);
       if (!m) continue;
       const bet_type = m[1].trim() as BetType;
@@ -886,6 +869,7 @@ function ProbsTab({ raceId }: { raceId: string }) {
         combination_key: combinationKey(bet_type, horse_numbers),
         horse_numbers,
         probability,
+        app_session_id: sid,
       });
     }
     if (!rows.length) {
@@ -909,22 +893,7 @@ function ProbsTab({ raceId }: { raceId: string }) {
     await supabase.from("model_probabilities").update({ probability: p }).eq("id", id);
     setProbs((prev) => prev.map((x) => (x.id === id ? { ...x, probability: p } : x)));
   };
-  const remove = async (id: string) => {
-    await supabase.from("model_probabilities").delete().eq("id", id);
-    setProbs((prev) => prev.filter((x) => x.id !== id));
-  };
-  const removeRun = async (id: string) => {
-    if (!confirm("이 모델 런과 모든 확률을 삭제하시겠습니까?")) return;
-    await supabase.from("model_probabilities").delete().eq("model_run_id", id);
-    const { error } = await supabase.from("model_runs").delete().eq("id", id);
-    if (error) {
-      toast.error("삭제 실패");
-      return;
-    }
-    toast.success("모델 런 삭제됨");
-    if (activeRun?.id === id) setActiveRun(null);
-    await reload();
-  };
+  // MVP: 익명 DELETE 차단으로 인해 모델 런/확률 삭제는 비활성화.
 
   // 합계 검증
   const sums = useMemo(() => {
