@@ -514,10 +514,6 @@ function OddsTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
     setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, odds, is_manual_edited: true } : e)));
   };
   // MVP: 익명 DELETE 차단으로 인해 개별 배당 항목/스냅샷 삭제는 비활성화.
-    toast.success("스냅샷 삭제됨");
-    if (activeSnap?.id === id) setActiveSnap(null);
-    await reload();
-  };
 
   return (
     <div className="space-y-4">
@@ -572,16 +568,9 @@ function OddsTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
                 >
                   <button
                     onClick={() => setActiveSnap(s)}
-                    className="px-2 py-1 hover:bg-accent rounded-l-md"
+                    className="px-2 py-1 hover:bg-accent rounded-md"
                   >
                     {new Date(s.captured_at).toLocaleString("ko-KR")}
-                  </button>
-                  <button
-                    onClick={() => void removeSnapshot(s.id)}
-                    className="px-1.5 py-1 text-muted-foreground hover:text-destructive"
-                    aria-label="스냅샷 삭제"
-                  >
-                    <Trash2 className="h-3 w-3" />
                   </button>
                 </div>
               ))}
@@ -605,13 +594,12 @@ function OddsTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
                   <th className="px-3 py-2 text-right">배당률</th>
                   <th className="px-3 py-2 text-right">OCR 신뢰도</th>
                   <th className="px-3 py-2 text-center">수동 수정</th>
-                  <th className="px-3 py-2"></th>
                 </tr>
               </thead>
               <tbody>
                 {entries.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
+                    <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
                       배당률 항목이 없습니다. 아래에서 추가하세요.
                     </td>
                   </tr>
@@ -644,11 +632,6 @@ function OddsTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
                       ) : (
                         <span className="text-xs text-muted-foreground">-</span>
                       )}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <Button size="icon" variant="ghost" onClick={() => removeEntry(e.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
                     </td>
                   </tr>
                 ))}
