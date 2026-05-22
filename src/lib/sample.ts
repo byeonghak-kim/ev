@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { combinationKey, type BetType } from "./ev";
+import { getAppSessionId } from "./session";
 
 const VENUES = ["서울", "부산경남", "제주"];
 const HORSE_NAMES = [
@@ -13,18 +14,14 @@ const HORSE_NAMES = [
   "백두대간",
 ];
 
-async function cleanupRace(raceId: string) {
-  // RLS public 정책이므로 클라이언트에서 정리 가능
-  await supabase.from("model_probabilities").delete().eq("race_id", raceId);
-  await supabase.from("model_runs").delete().eq("race_id", raceId);
-  await supabase.from("odds_entries").delete().eq("race_id", raceId);
-  await supabase.from("odds_snapshots").delete().eq("race_id", raceId);
-  await supabase.from("ev_results").delete().eq("race_id", raceId);
-  await supabase.from("horses").delete().eq("race_id", raceId);
-  await supabase.from("races").delete().eq("id", raceId);
+async function softDeleteRace(raceId: string, sid: string) {
+  // 익명 DELETE는 차단되어 있고 UPDATE 정책도 없는 테이블이 많으므로 best-effort soft-delete만 시도.
+  // (실제로는 별다른 정리가 안 되어도 race 자체는 그대로 두면 무해.)
+  await supabase.from("races").update({ is_deleted: true }).eq("id", raceId).eq("app_session_id", sid);
 }
 
 export async function createSampleRace(): Promise<string> {
+  const sid = getAppSessionId();
   const today = new Date().toISOString().slice(0, 10);
   const { data: race, error: rErr } = await supabase
     .from("races")
@@ -36,6 +33,7 @@ export async function createSampleRace(): Promise<string> {
       track_condition: "양호",
       weather: "맑음",
       memo: "샘플 경주 (자동 생성)",
+      app_session_id: sid,
     })
     .select("id")
     .single();
@@ -52,6 +50,7 @@ export async function createSampleRace(): Promise<string> {
       trainer: `조교사${i + 1}`,
       carried_weight: 55 + (i % 3),
       sex_age: i % 2 === 0 ? "수4" : "암4",
+      app_session_id: sid,
     }));
     const { data: hData, error: hErr } = await supabase
       .from("horses")
@@ -67,6 +66,7 @@ export async function createSampleRace(): Promise<string> {
         race_id: raceId,
         source: "sample_generator",
         memo: "샘플 배당률",
+        app_session_id: sid,
       })
       .select("id")
       .single();
@@ -82,6 +82,7 @@ export async function createSampleRace(): Promise<string> {
       odds: number;
       ocr_confidence: number;
       is_manual_edited: boolean;
+      app_session_id: string;
     }> = [];
     const winOdds = [2.5, 3.8, 5.0, 6.2, 8.5, 12.0, 18.0, 25.0];
     winOdds.forEach((o, i) => {
@@ -95,6 +96,7 @@ export async function createSampleRace(): Promise<string> {
         odds: o,
         ocr_confidence: 0.95,
         is_manual_edited: false,
+        app_session_id: sid,
       });
     });
     const exactaCombos: Array<[number, number, number]> = [
@@ -118,6 +120,7 @@ export async function createSampleRace(): Promise<string> {
         odds: o,
         ocr_confidence: 0.9,
         is_manual_edited: false,
+        app_session_id: sid,
       });
     });
     const { data: oData, error: oErr } = await supabase
@@ -136,6 +139,7 @@ export async function createSampleRace(): Promise<string> {
         model_name: "sample_model",
         model_version: "v0.1",
         memo: "샘플 확률",
+        app_session_id: sid,
       })
       .select("id")
       .single();
@@ -150,6 +154,7 @@ export async function createSampleRace(): Promise<string> {
       combination_key: string;
       horse_numbers: number[];
       probability: number;
+      app_session_id: string;
     }> = winProbs.map((p, i) => ({
       model_run_id: run.id,
       race_id: raceId,
@@ -157,6 +162,7 @@ export async function createSampleRace(): Promise<string> {
       combination_key: combinationKey("단승", [i + 1]),
       horse_numbers: [i + 1],
       probability: p,
+      app_session_id: sid,
     }));
     const exactaProbs: Array<[number, number, number]> = [
       [1, 2, 0.13],
@@ -176,6 +182,7 @@ export async function createSampleRace(): Promise<string> {
         combination_key: combinationKey("복승", [a, b]),
         horse_numbers: [a, b],
         probability: p,
+        app_session_id: sid,
       });
     });
     const { data: pData, error: pErr } = await supabase
@@ -198,8 +205,8 @@ export async function createSampleRace(): Promise<string> {
 
     return raceId;
   } catch (err) {
-    // 롤백
-    await cleanupRace(raceId).catch(() => undefined);
+    // best-effort soft-rollback (실제로는 cascade 정리는 RLS상 불가)
+    await softDeleteRace(raceId, sid).catch(() => undefined);
     throw err;
   }
 }
