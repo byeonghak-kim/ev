@@ -424,10 +424,15 @@ function OddsTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
     })();
   }, [activeSnap]);
 
-  const createSnapshot = async (screenshot_url?: string | null) => {
+  const createSnapshot = async (screenshot_path?: string | null) => {
     const { data, error } = await supabase
       .from("odds_snapshots")
-      .insert({ race_id: raceId, screenshot_url: screenshot_url ?? null, source: "manual" })
+      .insert({
+        race_id: raceId,
+        screenshot_url: screenshot_path ?? null,
+        source: "manual",
+        app_session_id: getAppSessionId(),
+      })
       .select("*")
       .single();
     if (error) {
@@ -442,11 +447,22 @@ function OddsTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
   const onUpload = async (file: File) => {
     setUploading(true);
     try {
-      const path = `${raceId}/${Date.now()}_${file.name}`;
-      const { error } = await supabase.storage.from("odds-screenshots").upload(path, file);
+      const sid = getAppSessionId();
+      const ext = (file.name.split(".").pop() ?? "").toLowerCase();
+      if (!["jpg", "jpeg", "png", "webp"].includes(ext)) {
+        toast.error("jpg, jpeg, png, webp 형식만 업로드할 수 있습니다");
+        return;
+      }
+      const path = `${sid}/${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage
+        .from("odds-screenshots")
+        .upload(path, file, { upsert: false, contentType: file.type });
       if (error) throw error;
-      const { data: pub } = supabase.storage.from("odds-screenshots").getPublicUrl(path);
-      await createSnapshot(pub.publicUrl);
+      // 비공개 버킷이므로 signed URL 사용 (path를 DB에 보관, 화면 표시는 매번 새 signed URL 생성 가능)
+      const { data: signed } = await supabase.storage
+        .from("odds-screenshots")
+        .createSignedUrl(path, 3600);
+      await createSnapshot(signed?.signedUrl ?? path);
       toast.success("이미지 업로드 완료 (자동 추출 준비 중 — 수동 입력 가능)");
     } catch (e) {
       console.error(e);
@@ -477,6 +493,7 @@ function OddsTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
       horse_numbers: nums,
       odds: oddsNum,
       is_manual_edited: true,
+      app_session_id: getAppSessionId(),
     });
     if (error) toast.error("추가 실패");
     else {
@@ -496,18 +513,7 @@ function OddsTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
       .eq("id", id);
     setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, odds, is_manual_edited: true } : e)));
   };
-  const removeEntry = async (id: string) => {
-    await supabase.from("odds_entries").delete().eq("id", id);
-    setEntries((prev) => prev.filter((e) => e.id !== id));
-  };
-  const removeSnapshot = async (id: string) => {
-    if (!confirm("이 배당률 스냅샷과 모든 항목을 삭제하시겠습니까?")) return;
-    await supabase.from("odds_entries").delete().eq("snapshot_id", id);
-    const { error } = await supabase.from("odds_snapshots").delete().eq("id", id);
-    if (error) {
-      toast.error("삭제 실패");
-      return;
-    }
+  // MVP: 익명 DELETE 차단으로 인해 개별 배당 항목/스냅샷 삭제는 비활성화.
     toast.success("스냅샷 삭제됨");
     if (activeSnap?.id === id) setActiveSnap(null);
     await reload();
