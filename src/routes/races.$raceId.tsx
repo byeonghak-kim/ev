@@ -731,9 +731,10 @@ function ProbsTab({ raceId }: { raceId: string }) {
 
   const ensureRun = async (): Promise<ModelRun | null> => {
     if (activeRun) return activeRun;
+    const sid = getAppSessionId();
     const { data, error } = await supabase
       .from("model_runs")
-      .insert({ race_id: raceId, model_name: "manual" })
+      .insert({ race_id: raceId, model_name: "manual", app_session_id: sid })
       .select("*")
       .single();
     if (error) {
@@ -746,7 +747,7 @@ function ProbsTab({ raceId }: { raceId: string }) {
   };
 
   const newRun = async () => {
-    // 1) 활성 스냅샷의 단승 배당률 수집
+    const sid = getAppSessionId();
     const { data: snaps } = await supabase
       .from("odds_snapshots")
       .select("id, captured_at")
@@ -769,7 +770,6 @@ function ProbsTab({ raceId }: { raceId: string }) {
       });
     }
 
-    // 2) 모델 런 생성
     const inferred =
       singleWinOdds.size >= 2 ? inferProbabilities({ singleWinOdds }) : [];
     const { data: run, error: runErr } = await supabase
@@ -780,6 +780,7 @@ function ProbsTab({ raceId }: { raceId: string }) {
         memo: inferred.length
           ? `단승 ${singleWinOdds.size}두 배당 기반 자동 추론`
           : null,
+        app_session_id: sid,
       })
       .select("*")
       .single();
@@ -788,7 +789,6 @@ function ProbsTab({ raceId }: { raceId: string }) {
       return;
     }
 
-    // 3) 자동 추론 결과 일괄 insert
     if (inferred.length) {
       const rows = inferred.map((p) => ({
         model_run_id: (run as ModelRun).id,
@@ -797,8 +797,8 @@ function ProbsTab({ raceId }: { raceId: string }) {
         combination_key: p.combination_key,
         horse_numbers: p.horse_numbers,
         probability: p.probability,
+        app_session_id: sid,
       }));
-      // chunk insert (대형 페이로드 대비 500개 단위)
       for (let i = 0; i < rows.length; i += 500) {
         const chunk = rows.slice(i, i + 500);
         const { error } = await supabase.from("model_probabilities").insert(chunk);
@@ -834,6 +834,7 @@ function ProbsTab({ raceId }: { raceId: string }) {
       combination_key: combinationKey(newRow.bet_type, nums),
       horse_numbers: nums,
       probability: p,
+      app_session_id: getAppSessionId(),
     });
     if (error) toast.error("추가 실패");
     else {
@@ -849,13 +850,12 @@ function ProbsTab({ raceId }: { raceId: string }) {
   const importCsv = async () => {
     const run = await ensureRun();
     if (!run) return;
+    const sid = getAppSessionId();
     const lines = csv.trim().split(/\r?\n/);
     if (!lines.length) return;
     const start = /bet_type/i.test(lines[0]) ? 1 : 0;
     const rows = [];
     for (let i = start; i < lines.length; i++) {
-      // bet_type,combination,horse_numbers,probability
-      // horse_numbers may contain commas, so support quoted "1,3"
       const m = lines[i].match(/^([^,]+),([^,]+),(?:"([^"]+)"|([^,]+)),([\d.]+)$/);
       if (!m) continue;
       const bet_type = m[1].trim() as BetType;
@@ -869,6 +869,7 @@ function ProbsTab({ raceId }: { raceId: string }) {
         combination_key: combinationKey(bet_type, horse_numbers),
         horse_numbers,
         probability,
+        app_session_id: sid,
       });
     }
     if (!rows.length) {
@@ -892,22 +893,7 @@ function ProbsTab({ raceId }: { raceId: string }) {
     await supabase.from("model_probabilities").update({ probability: p }).eq("id", id);
     setProbs((prev) => prev.map((x) => (x.id === id ? { ...x, probability: p } : x)));
   };
-  const remove = async (id: string) => {
-    await supabase.from("model_probabilities").delete().eq("id", id);
-    setProbs((prev) => prev.filter((x) => x.id !== id));
-  };
-  const removeRun = async (id: string) => {
-    if (!confirm("이 모델 런과 모든 확률을 삭제하시겠습니까?")) return;
-    await supabase.from("model_probabilities").delete().eq("model_run_id", id);
-    const { error } = await supabase.from("model_runs").delete().eq("id", id);
-    if (error) {
-      toast.error("삭제 실패");
-      return;
-    }
-    toast.success("모델 런 삭제됨");
-    if (activeRun?.id === id) setActiveRun(null);
-    await reload();
-  };
+  // MVP: 익명 DELETE 차단으로 인해 모델 런/확률 삭제는 비활성화.
 
   // 합계 검증
   const sums = useMemo(() => {
