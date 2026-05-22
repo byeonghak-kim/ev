@@ -16,23 +16,29 @@ export type Database = {
     Tables: {
       app_notes: {
         Row: {
+          app_session_id: string | null
           body: string | null
           created_at: string
           id: string
+          is_deleted: boolean
           race_id: string | null
           title: string | null
         }
         Insert: {
+          app_session_id?: string | null
           body?: string | null
           created_at?: string
           id?: string
+          is_deleted?: boolean
           race_id?: string | null
           title?: string | null
         }
         Update: {
+          app_session_id?: string | null
           body?: string | null
           created_at?: string
           id?: string
+          is_deleted?: boolean
           race_id?: string | null
           title?: string | null
         }
@@ -48,6 +54,7 @@ export type Database = {
       }
       ev_results: {
         Row: {
+          app_session_id: string | null
           bet_type: string
           combination_key: string
           created_at: string
@@ -58,6 +65,7 @@ export type Database = {
           horse_numbers: number[]
           id: string
           implied_probability: number
+          is_deleted: boolean
           memo: string | null
           model_run_id: string
           odds: number
@@ -68,6 +76,7 @@ export type Database = {
           snapshot_id: string
         }
         Insert: {
+          app_session_id?: string | null
           bet_type: string
           combination_key: string
           created_at?: string
@@ -78,6 +87,7 @@ export type Database = {
           horse_numbers: number[]
           id?: string
           implied_probability: number
+          is_deleted?: boolean
           memo?: string | null
           model_run_id: string
           odds: number
@@ -88,6 +98,7 @@ export type Database = {
           snapshot_id: string
         }
         Update: {
+          app_session_id?: string | null
           bet_type?: string
           combination_key?: string
           created_at?: string
@@ -98,6 +109,7 @@ export type Database = {
           horse_numbers?: number[]
           id?: string
           implied_probability?: number
+          is_deleted?: boolean
           memo?: string | null
           model_run_id?: string
           odds?: number
@@ -133,11 +145,13 @@ export type Database = {
       }
       horses: {
         Row: {
+          app_session_id: string | null
           carried_weight: number | null
           created_at: string
           horse_name: string
           horse_no: number
           id: string
+          is_deleted: boolean
           jockey: string | null
           memo: string | null
           race_id: string
@@ -145,11 +159,13 @@ export type Database = {
           trainer: string | null
         }
         Insert: {
+          app_session_id?: string | null
           carried_weight?: number | null
           created_at?: string
           horse_name: string
           horse_no: number
           id?: string
+          is_deleted?: boolean
           jockey?: string | null
           memo?: string | null
           race_id: string
@@ -157,11 +173,13 @@ export type Database = {
           trainer?: string | null
         }
         Update: {
+          app_session_id?: string | null
           carried_weight?: number | null
           created_at?: string
           horse_name?: string
           horse_no?: number
           id?: string
+          is_deleted?: boolean
           jockey?: string | null
           memo?: string | null
           race_id?: string
@@ -180,33 +198,39 @@ export type Database = {
       }
       model_probabilities: {
         Row: {
+          app_session_id: string | null
           bet_type: string
           combination_key: string
           created_at: string
           horse_numbers: number[]
           id: string
+          is_deleted: boolean
           memo: string | null
           model_run_id: string
           probability: number
           race_id: string
         }
         Insert: {
+          app_session_id?: string | null
           bet_type: string
           combination_key: string
           created_at?: string
           horse_numbers: number[]
           id?: string
+          is_deleted?: boolean
           memo?: string | null
           model_run_id: string
           probability: number
           race_id: string
         }
         Update: {
+          app_session_id?: string | null
           bet_type?: string
           combination_key?: string
           created_at?: string
           horse_numbers?: number[]
           id?: string
+          is_deleted?: boolean
           memo?: string | null
           model_run_id?: string
           probability?: number
@@ -231,8 +255,10 @@ export type Database = {
       }
       model_runs: {
         Row: {
+          app_session_id: string | null
           created_at: string
           id: string
+          is_deleted: boolean
           memo: string | null
           model_name: string | null
           model_version: string | null
@@ -241,8 +267,10 @@ export type Database = {
           trained_until: string | null
         }
         Insert: {
+          app_session_id?: string | null
           created_at?: string
           id?: string
+          is_deleted?: boolean
           memo?: string | null
           model_name?: string | null
           model_version?: string | null
@@ -251,8 +279,10 @@ export type Database = {
           trained_until?: string | null
         }
         Update: {
+          app_session_id?: string | null
           created_at?: string
           id?: string
+          is_deleted?: boolean
           memo?: string | null
           model_name?: string | null
           model_version?: string | null
@@ -272,10 +302,12 @@ export type Database = {
       }
       model_update_logs: {
         Row: {
+          app_session_id: string | null
           created_at: string
           error_message: string | null
           generated_probability_count: number | null
           id: string
+          is_deleted: boolean
           model_name: string | null
           model_run_id: string | null
           model_version: string | null
@@ -283,10 +315,12 @@ export type Database = {
           trained_data_count: number | null
         }
         Insert: {
+          app_session_id?: string | null
           created_at?: string
           error_message?: string | null
           generated_probability_count?: number | null
           id?: string
+          is_deleted?: boolean
           model_name?: string | null
           model_run_id?: string | null
           model_version?: string | null
@@ -294,10 +328,12 @@ export type Database = {
           trained_data_count?: number | null
         }
         Update: {
+          app_session_id?: string | null
           created_at?: string
           error_message?: string | null
           generated_probability_count?: number | null
           id?: string
+          is_deleted?: boolean
           model_name?: string | null
           model_run_id?: string | null
           model_version?: string | null
@@ -308,11 +344,13 @@ export type Database = {
       }
       odds_entries: {
         Row: {
+          app_session_id: string | null
           bet_type: string
           combination_key: string
           created_at: string
           horse_numbers: number[]
           id: string
+          is_deleted: boolean
           is_manual_edited: boolean
           ocr_confidence: number | null
           odds: number
@@ -320,11 +358,13 @@ export type Database = {
           snapshot_id: string
         }
         Insert: {
+          app_session_id?: string | null
           bet_type: string
           combination_key: string
           created_at?: string
           horse_numbers: number[]
           id?: string
+          is_deleted?: boolean
           is_manual_edited?: boolean
           ocr_confidence?: number | null
           odds: number
@@ -332,11 +372,13 @@ export type Database = {
           snapshot_id: string
         }
         Update: {
+          app_session_id?: string | null
           bet_type?: string
           combination_key?: string
           created_at?: string
           horse_numbers?: number[]
           id?: string
+          is_deleted?: boolean
           is_manual_edited?: boolean
           ocr_confidence?: number | null
           odds?: number
@@ -362,9 +404,11 @@ export type Database = {
       }
       odds_snapshots: {
         Row: {
+          app_session_id: string | null
           captured_at: string
           created_at: string
           id: string
+          is_deleted: boolean
           memo: string | null
           race_id: string
           raw_ocr_json: Json | null
@@ -372,9 +416,11 @@ export type Database = {
           source: string | null
         }
         Insert: {
+          app_session_id?: string | null
           captured_at?: string
           created_at?: string
           id?: string
+          is_deleted?: boolean
           memo?: string | null
           race_id: string
           raw_ocr_json?: Json | null
@@ -382,9 +428,11 @@ export type Database = {
           source?: string | null
         }
         Update: {
+          app_session_id?: string | null
           captured_at?: string
           created_at?: string
           id?: string
+          is_deleted?: boolean
           memo?: string | null
           race_id?: string
           raw_ocr_json?: Json | null
@@ -403,11 +451,13 @@ export type Database = {
       }
       public_data_sync_logs: {
         Row: {
+          app_session_id: string | null
           created_at: string
           error_message: string | null
           fetched_count: number | null
           id: string
           inserted_count: number | null
+          is_deleted: boolean
           skipped_count: number | null
           status: string | null
           sync_finished_at: string | null
@@ -416,11 +466,13 @@ export type Database = {
           target_date_to: string | null
         }
         Insert: {
+          app_session_id?: string | null
           created_at?: string
           error_message?: string | null
           fetched_count?: number | null
           id?: string
           inserted_count?: number | null
+          is_deleted?: boolean
           skipped_count?: number | null
           status?: string | null
           sync_finished_at?: string | null
@@ -429,11 +481,13 @@ export type Database = {
           target_date_to?: string | null
         }
         Update: {
+          app_session_id?: string | null
           created_at?: string
           error_message?: string | null
           fetched_count?: number | null
           id?: string
           inserted_count?: number | null
+          is_deleted?: boolean
           skipped_count?: number | null
           status?: string | null
           sync_finished_at?: string | null
@@ -445,6 +499,7 @@ export type Database = {
       }
       public_race_results: {
         Row: {
+          app_session_id: string | null
           carried_weight: number | null
           created_at: string
           distance_m: number | null
@@ -452,6 +507,7 @@ export type Database = {
           horse_no: number | null
           horse_weight: number | null
           id: string
+          is_deleted: boolean
           jockey: string | null
           margin: string | null
           owner_name: string | null
@@ -475,6 +531,7 @@ export type Database = {
           win_odds: number | null
         }
         Insert: {
+          app_session_id?: string | null
           carried_weight?: number | null
           created_at?: string
           distance_m?: number | null
@@ -482,6 +539,7 @@ export type Database = {
           horse_no?: number | null
           horse_weight?: number | null
           id?: string
+          is_deleted?: boolean
           jockey?: string | null
           margin?: string | null
           owner_name?: string | null
@@ -505,6 +563,7 @@ export type Database = {
           win_odds?: number | null
         }
         Update: {
+          app_session_id?: string | null
           carried_weight?: number | null
           created_at?: string
           distance_m?: number | null
@@ -512,6 +571,7 @@ export type Database = {
           horse_no?: number | null
           horse_weight?: number | null
           id?: string
+          is_deleted?: boolean
           jockey?: string | null
           margin?: string | null
           owner_name?: string | null
@@ -538,9 +598,11 @@ export type Database = {
       }
       races: {
         Row: {
+          app_session_id: string | null
           created_at: string
           distance_m: number | null
           id: string
+          is_deleted: boolean
           memo: string | null
           race_date: string
           race_no: number
@@ -550,9 +612,11 @@ export type Database = {
           weather: string | null
         }
         Insert: {
+          app_session_id?: string | null
           created_at?: string
           distance_m?: number | null
           id?: string
+          is_deleted?: boolean
           memo?: string | null
           race_date: string
           race_no: number
@@ -562,9 +626,11 @@ export type Database = {
           weather?: string | null
         }
         Update: {
+          app_session_id?: string | null
           created_at?: string
           distance_m?: number | null
           id?: string
+          is_deleted?: boolean
           memo?: string | null
           race_date?: string
           race_no?: number
