@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Sparkles, PlusCircle, History, ChevronRight, Trash2 } from "lucide-react";
+import { Sparkles, PlusCircle, History, ChevronRight } from "lucide-react";
 import { createSampleRace } from "@/lib/sample";
 import { toast } from "sonner";
 
@@ -61,23 +61,8 @@ function Home() {
     }
   };
 
-  const onDelete = async (e: React.MouseEvent, id: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!confirm("이 경주와 관련 데이터를 모두 삭제하시겠습니까?")) return;
-    await supabase.from("ev_results").delete().eq("race_id", id);
-    await supabase.from("model_probabilities").delete().eq("race_id", id);
-    await supabase.from("model_runs").delete().eq("race_id", id);
-    await supabase.from("odds_entries").delete().eq("race_id", id);
-    await supabase.from("odds_snapshots").delete().eq("race_id", id);
-    await supabase.from("horses").delete().eq("race_id", id);
-    const { error } = await supabase.from("races").delete().eq("id", id);
-    if (error) toast.error("삭제 실패");
-    else {
-      toast.success("삭제됨");
-      void refresh();
-    }
-  };
+  // MVP 보안 정책상 익명 DELETE는 차단되어 있어 삭제 버튼을 숨김.
+  // (향후 세션 소유자 기반 soft-delete 도입 시 복원 예정.)
 
   return (
     <div className="space-y-6">
@@ -148,13 +133,6 @@ function Home() {
                     </CardContent>
                   </Card>
                 </Link>
-                <button
-                  onClick={(e) => void onDelete(e, r.id)}
-                  className="absolute right-2 top-2 rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                  aria-label="경주 삭제"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
               </div>
             ))}
           </div>
