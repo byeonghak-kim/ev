@@ -92,6 +92,13 @@ function RootComponent() {
                 히스토리
               </Link>
               <Link
+                to="/data"
+                className="rounded-md px-3 py-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                activeProps={{ className: "rounded-md px-3 py-1.5 bg-accent text-foreground font-medium" }}
+              >
+                데이터 관리
+              </Link>
+              <Link
                 to="/help"
                 className="rounded-md px-3 py-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
                 activeProps={{ className: "rounded-md px-3 py-1.5 bg-accent text-foreground font-medium" }}
