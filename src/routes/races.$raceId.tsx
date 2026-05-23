@@ -1185,6 +1185,7 @@ function EvTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
       toast.error("계산할 결과가 없습니다");
       return;
     }
+    const sid = getAppSessionId();
     const rows = evRows.map((r, i) => ({
       race_id: raceId,
       snapshot_id: snap.id,
@@ -1201,6 +1202,7 @@ function EvTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
       expected_return: r.expected_return,
       recommendation: r.recommendation,
       rank: i + 1,
+      app_session_id: sid,
     }));
     const { error } = await supabase.from("ev_results").insert(rows);
     if (error) toast.error("저장 실패");
