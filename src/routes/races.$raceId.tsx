@@ -991,9 +991,7 @@ function ProbsTab({ raceId }: { raceId: string }) {
                       />
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <Button size="icon" variant="ghost" onClick={() => remove(p.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {/* 삭제 버튼 제거: anon DELETE 차단 정책으로 비활성화 */}
                     </td>
                   </tr>
                 ))}
