@@ -924,16 +924,9 @@ function ProbsTab({ raceId }: { raceId: string }) {
               >
                 <button
                   onClick={() => setActiveRun(r)}
-                  className="px-2 py-1 hover:bg-accent rounded-l-md"
+                  className="px-2 py-1 hover:bg-accent rounded-md"
                 >
                   {new Date(r.created_at).toLocaleString("ko-KR")}
-                </button>
-                <button
-                  onClick={() => void removeRun(r.id)}
-                  className="px-1.5 py-1 text-muted-foreground hover:text-destructive"
-                  aria-label="모델 런 삭제"
-                >
-                  <Trash2 className="h-3 w-3" />
                 </button>
               </div>
             ))}
