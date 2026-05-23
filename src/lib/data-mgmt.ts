@@ -27,7 +27,24 @@ export async function addSamplePublicData(): Promise<SampleAddResult> {
   const sid = getAppSessionId();
   const baseDate = new Date();
   baseDate.setHours(0, 0, 0, 0);
-  const rows: Array<Record<string, unknown>> = [];
+  const rows: Array<{
+    source: string;
+    source_unique_key: string;
+    race_date: string;
+    venue: string;
+    race_no: number;
+    horse_no: number;
+    horse_name: string;
+    jockey: string;
+    trainer: string;
+    rank: number;
+    win_odds: number;
+    place_odds: number;
+    weather: string;
+    track_condition: string;
+    raw_json: { mode: string; seed: number };
+    app_session_id: string;
+  }> = [];
   for (let i = 0; i < 20; i++) {
     const d = new Date(baseDate);
     d.setDate(d.getDate() - (i % 10));
