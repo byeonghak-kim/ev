@@ -924,16 +924,9 @@ function ProbsTab({ raceId }: { raceId: string }) {
               >
                 <button
                   onClick={() => setActiveRun(r)}
-                  className="px-2 py-1 hover:bg-accent rounded-l-md"
+                  className="px-2 py-1 hover:bg-accent rounded-md"
                 >
                   {new Date(r.created_at).toLocaleString("ko-KR")}
-                </button>
-                <button
-                  onClick={() => void removeRun(r.id)}
-                  className="px-1.5 py-1 text-muted-foreground hover:text-destructive"
-                  aria-label="모델 런 삭제"
-                >
-                  <Trash2 className="h-3 w-3" />
                 </button>
               </div>
             ))}
@@ -998,9 +991,7 @@ function ProbsTab({ raceId }: { raceId: string }) {
                       />
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <Button size="icon" variant="ghost" onClick={() => remove(p.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {/* 삭제 버튼 제거: anon DELETE 차단 정책으로 비활성화 */}
                     </td>
                   </tr>
                 ))}
@@ -1194,6 +1185,7 @@ function EvTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
       toast.error("계산할 결과가 없습니다");
       return;
     }
+    const sid = getAppSessionId();
     const rows = evRows.map((r, i) => ({
       race_id: raceId,
       snapshot_id: snap.id,
@@ -1210,6 +1202,7 @@ function EvTab({ raceId, horses }: { raceId: string; horses: Horse[] }) {
       expected_return: r.expected_return,
       recommendation: r.recommendation,
       rank: i + 1,
+      app_session_id: sid,
     }));
     const { error } = await supabase.from("ev_results").insert(rows);
     if (error) toast.error("저장 실패");
