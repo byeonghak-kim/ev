@@ -79,13 +79,13 @@ export async function addSamplePublicData(): Promise<SampleAddResult> {
   }
 
   // 중복은 source_unique_key UNIQUE 제약이 막아주므로, 미리 존재 확인해 skip 카운트 산정
-  const keys = rows.map((r) => r.source_unique_key as string);
+  const keys = rows.map((r) => r.source_unique_key);
   const { data: existing } = await supabase
     .from("public_race_results")
     .select("source_unique_key")
     .in("source_unique_key", keys);
   const have = new Set((existing ?? []).map((e) => e.source_unique_key as string));
-  const toInsert = rows.filter((r) => !have.has(r.source_unique_key as string));
+  const toInsert = rows.filter((r) => !have.has(r.source_unique_key));
   const skipped = rows.length - toInsert.length;
   let inserted = 0;
   let errorMsg: string | null = null;
